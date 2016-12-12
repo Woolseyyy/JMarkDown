@@ -418,7 +418,7 @@ class MDFrame extends JFrame {
                         byte[] buffer = new byte[size];
                         in.read(buffer);
                         in.close();
-                        editor.setText(new String(buffer, "GB2312"));
+                        editor.setText(new String(buffer, "UTF8"));
                         frame.setTitle(fileDialog.getFile() + " - [" + stringCut(filePath, filePathLimit) + "]" + " - " + frameTitle);
                     } catch (IOException e1) {
                         e1.printStackTrace();
