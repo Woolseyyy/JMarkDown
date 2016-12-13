@@ -1,5 +1,6 @@
 package woolsey;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
@@ -21,6 +22,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.ImageObserver;
+import java.awt.image.ImageProducer;
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -53,6 +56,7 @@ class MDFrame extends JFrame {
     private final int filePathLimit = 30;
     private final String defaultStyleFilePath = System.getProperty("user.dir") + "\\src\\main\\resources\\config\\style.css";
     private final String getDefaultStyleDirectory = System.getProperty("user.dir") + "\\src\\main\\resources\\config";
+    private final String iconPath = "src/main/resources/img/m.png";
     private String styleFilePath = defaultStyleFilePath;
     private String styleDirectory = getDefaultStyleDirectory;
 
@@ -64,6 +68,12 @@ class MDFrame extends JFrame {
         this.setSize(1000,500);
         this.setLayout(new BorderLayout());
         this.setTitle(frameTitle);
+        try {
+            ImageIcon imageIcon = new ImageIcon(iconPath);
+            this.setIconImage(imageIcon.getImage());
+        } catch (IllegalArgumentException e) {
+            e.printStackTrace();
+        }
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 
