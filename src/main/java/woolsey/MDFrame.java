@@ -8,6 +8,11 @@ import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
 import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
+import javax.swing.text.*;
+import javax.swing.text.html.HTML;
+import javax.swing.text.html.HTMLDocument;
+import javax.swing.text.html.HTMLEditorKit;
+import javax.swing.text.html.StyleSheet;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
@@ -17,7 +22,10 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -43,6 +51,10 @@ class MDFrame extends JFrame {
     private final String rootString = "Article";
     private final String frameTitle = "MarkDown by Woolsey 1.0";
     private final int filePathLimit = 30;
+    private final String defaultStyleFilePath = System.getProperty("user.dir") + "\\src\\main\\resources\\config\\style.css";
+    private final String getDefaultStyleDirectory = System.getProperty("user.dir") + "\\src\\main\\resources\\config";
+    private String styleFilePath = defaultStyleFilePath;
+    private String styleDirectory = getDefaultStyleDirectory;
 
 
     MDFrame(){
@@ -144,6 +156,13 @@ class MDFrame extends JFrame {
         previewer.setContentType("text/html");
         previewer.setBackground(new Color(245, 245, 245));
         previewer.setEditable(false);
+        try {
+            ((HTMLEditorKit)previewer.getEditorKitForContentType("text/html")).
+                    getStyleSheet().importStyleSheet(new URL("file:\\" + defaultStyleFilePath));
+        } catch (MalformedURLException e) {
+            System.out.println(defaultStyleFilePath);
+            e.printStackTrace();
+        }
 
         //add into scrollPane and return
         JScrollPane previewerScrollPane = new JScrollPane(previewer);
@@ -166,27 +185,33 @@ class MDFrame extends JFrame {
 
         //open button
         JButton openButton = new JButton();
-        buttonCommonStyle(openButton, "./src/main/resources/open.png", "./src/main/resources/open_enter.png", "open file");
-        openButton.addActionListener(new openButtonListener());
+        buttonCommonStyle(openButton, "./src/main/resources/img/open.png", "./src/main/resources/img/open_enter.png", "open file");
+        openButton.addActionListener(new OpenButtonListener());
         toolArea.add(openButton);
 
         //save button
         JButton saveButton = new JButton();
-        buttonCommonStyle(saveButton, "./src/main/resources/save.png", "./src/main/resources/save_enter.png", "save");
+        buttonCommonStyle(saveButton, "./src/main/resources/img/save.png", "./src/main/resources/img/save_enter.png", "save");
         saveButton.addActionListener(new SaveButtonListener());
         toolArea.add(saveButton);
 
         //html button
         JButton htmlButton = new JButton();
-        buttonCommonStyle(htmlButton, "./src/main/resources/html.png", "./src/main/resources/html_enter.png", "export to html");
+        buttonCommonStyle(htmlButton, "./src/main/resources/img/html.png", "./src/main/resources/img/html_enter.png", "export to html");
         htmlButton.addActionListener(new HtmlButtonListener());
         toolArea.add(htmlButton);
 
         //doc button
         JButton docButton = new JButton();
-        buttonCommonStyle(docButton, "./src/main/resources/doc.png", "./src/main/resources/doc_enter.png", "export to doc");
+        buttonCommonStyle(docButton, "./src/main/resources/img/doc.png", "./src/main/resources/img/doc_enter.png", "export to doc");
         docButton.addActionListener(new DocButtonListener());
         toolArea.add(docButton);
+
+        //setting button
+        JButton settingButton = new JButton();
+        buttonCommonStyle(settingButton, "./src/main/resources/img/setting.png", "./src/main/resources/img/setting_enter.png", "style config");
+        settingButton.addActionListener(new SettingButtonListener());
+        toolArea.add(settingButton);
 
         return toolArea;
     }
@@ -399,7 +424,7 @@ class MDFrame extends JFrame {
         });
     }
 
-    private class openButtonListener implements ActionListener{
+    private class OpenButtonListener implements ActionListener{
 
         @Override
         public void actionPerformed(ActionEvent e) {
@@ -478,7 +503,7 @@ class MDFrame extends JFrame {
                 filePath = fileDialog.getDirectory() + fileDialog.getFile() + ( ( fileDialog.getFile().contains(".html") )?"":".html" );
                 try {
                     FileOutputStream out = new FileOutputStream(filePath);
-                    String content = previewer.getText();
+                    String content = getFullHTML(previewer);
                     out.write(content.getBytes());
                     out.close();
                 } catch (IOException e1) {
@@ -486,6 +511,31 @@ class MDFrame extends JFrame {
                 }
             }
         }
+    }
+
+    private String getFullHTML(JEditorPane pane) {
+        HTMLDocument document =(HTMLDocument) pane.getDocument();
+        StyleSheet styles = document.getStyleSheet();
+
+        //get string of style tag
+        String styleTag = "<style  type=\"text/css\">";
+        try {
+            FileInputStream in = new FileInputStream(styleFilePath);
+            int size = in.available();
+            byte[] buffer = new byte[size];
+            in.read(buffer);
+            in.close();
+            styleTag += new String(buffer, "UTF8");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        styleTag += "</style>";
+
+        String content = pane.getText();
+        int headTagPos = content.indexOf("<head>");
+        content = content.substring(0, headTagPos+6) + styleTag + content.substring(headTagPos+6, content.length());
+
+        return content;
     }
 
     private class DocButtonListener implements ActionListener{
@@ -500,7 +550,7 @@ class MDFrame extends JFrame {
             if (fileDialog.getFile() != null){
                 filePath = fileDialog.getDirectory() + fileDialog.getFile() + ( ( fileDialog.getFile().contains(".doc") )?"":".doc" );
                 try {
-                    byte contentByte[] = previewer.getText().getBytes();
+                    byte contentByte[] = getFullHTML(previewer).getBytes();
                     ByteArrayInputStream bais = new ByteArrayInputStream(contentByte);
                     POIFSFileSystem poifs = new POIFSFileSystem();
                     DirectoryEntry directory = poifs.getRoot();
@@ -514,6 +564,52 @@ class MDFrame extends JFrame {
                     e1.printStackTrace();
                 }
             }
+        }
+    }
+
+    private class SettingButtonListener implements ActionListener{
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            String filePath;
+            //open file
+            FileDialog fileDialog = new FileDialog(frame, "Load style files", FileDialog.LOAD);
+            fileDialog.setFile("style.css");
+            fileDialog.setDirectory(styleDirectory);
+            fileDialog.setVisible(true);
+            if (fileDialog.getFile() != null){
+                if(fileDialog.getFile().matches(".*\\.css"))// if css type
+                {
+                    filePath = fileDialog.getDirectory() + fileDialog.getFile() + ( ( fileDialog.getFile().contains(".css") )?"":".css" );
+                    System.out.print(filePath);
+                    styleFilePath = filePath;
+                    styleDirectory = fileDialog.getDirectory();
+                    try {
+                        /*((HTMLEditorKit)previewer.getEditorKitForContentType("text/html")).
+                                getStyleSheet().importStyleSheet(new URL("file:\\" + filePath));
+                                */
+                        FileInputStream in = new FileInputStream(filePath);
+                        int size = in.available();
+                        byte[] buffer = new byte[size];
+                        in.read(buffer);
+                        in.close();
+                        String css = new String(buffer, "UTF8");
+
+                        StringReader inReader = new StringReader(css);
+                        ((HTMLEditorKit)previewer.getEditorKitForContentType("text/html")).
+                                getStyleSheet().loadRules(inReader, new URL("file:\\" + filePath));
+
+                    } catch (IOException e1) {
+                        e1.printStackTrace();
+                    }
+
+
+                }
+                else{
+                    JOptionPane.showMessageDialog(null, "请打开CSS格式文件", "文件格式错误", JOptionPane.PLAIN_MESSAGE);
+                }
+            }
+
         }
     }
 
