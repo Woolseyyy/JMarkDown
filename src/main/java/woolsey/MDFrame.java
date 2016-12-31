@@ -25,8 +25,7 @@ import java.awt.event.MouseEvent;
 import java.awt.image.ImageObserver;
 import java.awt.image.ImageProducer;
 import java.io.*;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.*;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.regex.Matcher;
@@ -51,6 +50,11 @@ class MDFrame extends JFrame {
     private DefaultTreeModel treeData;
     private JTree MDTree;
     private DefaultMutableTreeNode root;
+    private ServerSocket server = null;
+    private Socket socket = null;
+    private SocketReadThread socketReadThread = null;
+    private PrintWriter socketOutStream = null;
+    private boolean ifSocketTypeIn = false;
     private final String rootString = "Article";
     private final String frameTitle = "MarkDown by Woolsey 1.0";
     private final int filePathLimit = 30;
@@ -59,6 +63,8 @@ class MDFrame extends JFrame {
     private final String iconPath = "src/main/resources/img/m.png";
     private String styleFilePath = defaultStyleFilePath;
     private String styleDirectory = getDefaultStyleDirectory;
+    private final char BEGIN = '@';
+    private final char END = '#';
 
 
     MDFrame(){
@@ -223,6 +229,21 @@ class MDFrame extends JFrame {
         settingButton.addActionListener(new SettingButtonListener());
         toolArea.add(settingButton);
 
+        //online button
+        StateJButton onlineButton = new StateJButton();
+        stateButtonCommonStyle(onlineButton, "./src/main/resources/img/wave.png", "./src/main/resources/img/wave_enter.png",
+                "./src/main/resources/img/wave_enter.png", "./src/main/resources/img/wave.png", "get online", "get offline");
+        onlineButton.addActionListener(new onlineButtonListener());
+        toolArea.add(onlineButton);
+
+
+        //connect button
+        StateJButton connectButton = new StateJButton();
+        stateButtonCommonStyle(connectButton, "./src/main/resources/img/call.png", "./src/main/resources/img/call_enter.png",
+                "./src/main/resources/img/call_enter.png", "./src/main/resources/img/call.png", "call others", "hang up");
+        connectButton.addActionListener(new connectButtonListener());
+        toolArea.add(connectButton);
+
         return toolArea;
     }
 
@@ -234,6 +255,15 @@ class MDFrame extends JFrame {
             try {
                 previewer.setText(markdown4jProcessor.process(editor.getText()));
                 TreeUpdate(editor.getText());
+
+                //socket
+                if(socket!=null && socketOutStream!=null && !ifSocketTypeIn){
+
+                    socketOutStream.print(BEGIN);
+                    socketOutStream.println(editor.getLineCount());
+                    socketOutStream.println(editor.getText());
+                    socketOutStream.flush();
+                }
             } catch (IOException e1) {
                 e1.printStackTrace();
             }
@@ -242,6 +272,14 @@ class MDFrame extends JFrame {
             try {
                 previewer.setText(markdown4jProcessor.process(editor.getText()));
                 TreeUpdate(editor.getText());
+
+                //socket
+                if(socket!=null && socketOutStream!=null && !ifSocketTypeIn){
+                    socketOutStream.print(BEGIN);
+                    socketOutStream.println(editor.getLineCount());
+                    socketOutStream.println(editor.getText());
+                    socketOutStream.flush();
+                }
             } catch (IOException e1) {
                 e1.printStackTrace();
             }
@@ -434,6 +472,88 @@ class MDFrame extends JFrame {
         });
     }
 
+    private class StateJButton extends JButton{
+        public final boolean CLICKED = true;
+        public final boolean NOT_CLICKED = false;
+        private boolean state = NOT_CLICKED;
+        public boolean getState(){
+            return state;
+        }
+        public void changeState(){
+            state = !state;
+        }
+    }
+
+    private void stateButtonCommonStyle(final StateJButton btn, String iconPath, String iconPath_enter,
+                                        String iconPath_clicked, String iconPath_clicked_enter, final String tip, final String tip_clicked){
+        Image iconImg = new ImageIcon(iconPath).getImage().getScaledInstance(20, 20, Image.SCALE_FAST);
+        Image iconImg_enter = new ImageIcon(iconPath_enter).getImage().getScaledInstance(20, 20, Image.SCALE_FAST);
+        Image iconImg_clicked = new ImageIcon(iconPath_clicked).getImage().getScaledInstance(20, 20, Image.SCALE_FAST);
+        Image iconImg_clicked_enter = new ImageIcon(iconPath_clicked_enter).getImage().getScaledInstance(20, 20, Image.SCALE_FAST);
+        final ImageIcon icon = new ImageIcon(iconImg);
+        final ImageIcon icon_enter = new ImageIcon(iconImg_enter);
+        final ImageIcon icon_clicked = new ImageIcon(iconImg_clicked);
+        final ImageIcon icon_clicked_enter = new ImageIcon(iconImg_clicked_enter);
+
+        btn.setOpaque(false);
+        btn.setBorder(BorderFactory.createEmptyBorder(0,0, 0, 0));
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setFocusPainted(false);
+        btn.setRolloverEnabled(true);
+        btn.setBackground(null);
+        btn.setPreferredSize(new Dimension(30, 40));
+        btn.setIcon(icon);
+        btn.setToolTipText(tip);
+        //btn.updateUI();
+
+        btn.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                StateJButton src = (StateJButton)e.getSource();
+                if (src.isRolloverEnabled()){
+                    src.setBackground(new Color(117, 117, 117));
+                    src.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                    if(src.getState() == src.NOT_CLICKED){
+                        src.setIcon(icon_enter);
+                    }
+                    else if(src.getState() == src.CLICKED){
+                        src.setIcon(icon_clicked_enter);
+                    }
+                }
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                StateJButton src = (StateJButton)e.getSource();
+                if (src.isRolloverEnabled()){
+                    src.setBackground(null);
+                    if(src.getState() == src.NOT_CLICKED){
+                        src.setIcon(icon);
+                    }
+                    else if(src.getState() == src.CLICKED){
+                        src.setIcon(icon_clicked);
+                    }
+                }
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                StateJButton src = (StateJButton)e.getSource();
+                if (src.isRolloverEnabled()){
+                    if(src.getState() == src.NOT_CLICKED){
+                        src.setIcon(icon_clicked);
+                        src.setText(tip_clicked);
+                    }
+                    else if(src.getState() == src.CLICKED){
+                        src.setIcon(icon);
+                        src.setText(tip);
+                    }
+                }
+            }
+        });
+    }
+
     private class OpenButtonListener implements ActionListener{
 
         @Override
@@ -618,6 +738,157 @@ class MDFrame extends JFrame {
                 else{
                     JOptionPane.showMessageDialog(null, "请打开CSS格式文件", "文件格式错误", JOptionPane.PLAIN_MESSAGE);
                 }
+            }
+
+        }
+    }
+
+    private class onlineButtonListener implements ActionListener{
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            StateJButton src = (StateJButton)e.getSource();
+            int port;
+            String portString = null;
+
+            if(src.getState() == src.NOT_CLICKED){// not connected network before
+                //ask to input the port
+                do {
+                    portString = JOptionPane.showInputDialog("Please input the port, so others can connect you based on ip:port.\nThe port should be larger than 1023");
+
+                    if(portString==null){return;}
+
+                    port = Integer.parseInt(portString);
+                }while (port < 1023);
+
+                try {
+                    //connected the network so others can connect
+                    server = new ServerSocket(port);
+
+                    //change the state of the
+                    src.changeState();
+
+                    //start a socket read thread
+                    socketReadThread = new SocketReadThread();
+                    socketReadThread.start();
+
+                    //show ip and port
+                    String localIP = InetAddress.getLocalHost().getHostAddress();
+                    JOptionPane.showMessageDialog(frame, "Your address is: " + localIP + ":" + portString);
+
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                    JOptionPane.showMessageDialog(frame, "Failed to get online, please try again!");
+                }
+            }
+            else if (src.getState() == src.CLICKED){// have connected
+                socketReadThread.offLine();
+                socketOutStream.close();
+                socketOutStream = null;
+                src.changeState();
+            }
+
+        }
+    }
+
+    private class SocketReadThread extends Thread {
+        private boolean run = true;
+
+        public void offLine(){
+            run = false;
+        }
+
+        @Override
+        public void run(){
+            try {
+                if(socket==null){
+                    socket = server.accept();
+
+                    //start socket write
+                    socketOutStream = new PrintWriter(socket.getOutputStream());
+                }
+
+                //initialize
+                BufferedReader is=new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                String text = "";
+                String line;
+                char test;
+
+                //start loop to handle the message
+                while(run && (test=(char)is.read()) != END){
+                    if(test==BEGIN){
+                        int length = Integer.parseInt(is.readLine());
+                        text = "";
+                        for(int i=0; i<length; i++){
+                            line = is.readLine();
+                            text += line + "\n";
+                        }
+                        ifSocketTypeIn = true;
+                        editor.setText(text);
+                        ifSocketTypeIn = false;
+                    }
+                }
+
+                //stop
+                is.close();
+                socket.close();
+                socket = null;
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private class connectButtonListener implements ActionListener{
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            StateJButton src = (StateJButton)e.getSource();
+            String address;
+            String ip;
+            int port;
+
+            if(src.getState() == src.NOT_CLICKED){// not call others before
+                //ask to input the target
+                address = JOptionPane.showInputDialog("Please input the target address in form of \"ip:port\" ");
+
+                if(address==null){return;}
+
+                String addressHandled[] = address.split(":");
+                ip = addressHandled[0];
+                port = Integer.parseInt(addressHandled[1]);
+
+                try {
+                    //connected the network so others can connect
+                    socket = new Socket(ip, port);
+                    socketOutStream = new PrintWriter(socket.getOutputStream());
+
+                    //start a socket read thread
+                    socketReadThread = new SocketReadThread();
+                    socketReadThread.start();
+
+                    src.changeState();
+                    JOptionPane.showMessageDialog(frame, "Connected");
+
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                    JOptionPane.showMessageDialog(frame, "Failed to connect, please try again!");
+                }
+            }
+            else if (src.getState() == src.CLICKED){// have connected
+                try {
+                    socketOutStream.print(END);
+                    socketOutStream.flush();
+                    socket.close();
+                    socketOutStream.close();
+                    socketOutStream = null;
+                    socket = null;
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+
+                src.changeState();
             }
 
         }
